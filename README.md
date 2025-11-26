@@ -154,7 +154,8 @@ Each input is immediately parsed and evaluated.
 - Logical operators
 - Matrix operations
 - User Manual/Documentation (REPL)
-- Welcome banner (REPL)  
+- Welcome banner (REPL)
+- Basic binary operations/conversions  
 
 **Improve:**
 - Error messages with character/line position  
