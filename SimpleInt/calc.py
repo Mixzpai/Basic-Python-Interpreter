@@ -1,35 +1,24 @@
 #======================================================================================#
+#================================== Start of Program ==================================#
 #======================================================================================#
-# Token types
-INTEGER, REAL, STRING = 'INTEGER', 'REAL', 'STRING'
-# Operators and delimiters
-PLUS, MINUS, MUL, MOD, DIV, SQRT, LOG, POW, EOF = (
-    'PLUS', 'MINUS', 'MUL', 'MOD', 'DIV', 'SQRT', 'LOG', 'POW', 'EOF')
-# Boolean values
-TRUE, FALSE = 'TRUE', 'FALSE'
-# Comparison operators
-GE, GT, LT, LE, EQ, NE = 'GE', 'GT', 'LT', 'LE', 'EQ', 'NE'
-# Parentheses
-LP, RP = 'LP', 'RP'
-# Square brackets (reserved for later)
-LB, RB = 'LB', 'RB'
-# Assignment (reserved for later)
-ASSIGN = 'ASSIGN'
+from token import Token
+from token import (
+    INTEGER, REAL, STRING, PLUS, MINUS, MUL, MOD, DIV, SQRT, LOG, POW, EOF,
+    TRUE, FALSE, GE, GT, LT, LE, EQ, NE, LP, RP, LB, RB, ASSIGN) 
 
-#======================================================================================#
-#======================================================================================#
-class Token(object):
-    def __init__(self, type, value):
-        self.type = type
-        self.value = value
-
-    def __str__(self):
-        return 'Token({type}, {value})'.format(type=self.type, value=repr(self.value))
-
-    def __repr__(self):
-        return self.__str__()
-
-#======================================================================================#
+# Interpreter class:
+#    - __init__: initializes the interpreter with input text
+#    - error: raises an error for invalid syntax
+#    - skip_whitespace: skips whitespace characters
+#    - peek: peeks at the next character without advancing the position
+#    - advance_pos: advances the position in the input text
+#    - _ln: computes natural logarithm using Taylor series expansion
+#    - eat: consumes the current token if it matches the expected type
+#    - get_next_token: tokenizes the input text
+#    - factor: processes factors in the expression
+#    - term: processes terms in the expression
+#    - comparison: processes comparison operations
+#    - expr: processes the entire expression
 #======================================================================================#
 class Interpreter(object):
     def __init__(self, text):
@@ -38,20 +27,25 @@ class Interpreter(object):
         self.current_token = None
         self.current_char = self.text[self.pos] if self.text else None
     #==================================================================#
+    # Helpers and Utilities
     #==================================================================#
+    # Raise an error for invalid syntax
     def error(self):
         raise Exception('Error parsing input')
 
+    # Skip whitespace characters
     def skip_whitespace(self, text):
         while self.current_char is not None and self.current_char.isspace():
             self.advance_pos()
 
+    # Peek at the next character without advancing the position
     def peek(self, text):
         next_pos = self.pos + 1
         if next_pos > len(text) - 1:
             return None
         return text[next_pos]
 
+    # Advance the 'pos' pointer and set 'current_char'
     def advance_pos(self, x=1):
         self.pos += x
         if self.pos > len(self.text) - 1:
@@ -59,6 +53,7 @@ class Interpreter(object):
         else:
             self.current_char = self.text[self.pos]
    
+    # Natural logarithm using Taylor series expansion
     def _ln(self, x, term=20):
         if x <= 0:
             raise ValueError("Domain error: logarithm undefined for x <= 0")
@@ -72,28 +67,35 @@ class Interpreter(object):
             k += 2
         return 2 * result
     
+    # Consume the current token if it matches the expected type
     def eat(self, token_type):
         if self.current_token.type == token_type:
             self.current_token = self.get_next_token()
         else:
             self.error()
     #==================================================================#
+    # Tokenization
     #==================================================================#    
     def get_next_token(self):
+        # Get the next token from the input text
         text = self.text
 
+        # Skip any whitespace characters
         self.skip_whitespace(text)
 
+        # End of input
         if self.pos > len(text) - 1:
             return Token(EOF, None)
-
+        
+        # Tokenize integers
         if self.current_char.isdigit():
             tk = ''
             while self.pos < len(self.text) and self.current_char.isdigit():
                 tk += self.text[self.pos]
                 self.advance_pos()
             return Token(INTEGER, int(tk))
-
+        
+        # Tokenize operators and parentheses
         match self.current_char:
             case '+':
                 self.advance_pos()
@@ -164,6 +166,7 @@ class Interpreter(object):
             case _:
                 self.error()
     #==================================================================#
+    # Expression Parsing and Evaluation
     #==================================================================#
     def factor(self):
         token = self.current_token
@@ -203,6 +206,7 @@ class Interpreter(object):
             case _:
                 self.error()
     #==================================================================#
+    # Term operations
     #==================================================================#
     def term(self):
         result = self.factor()
@@ -226,6 +230,7 @@ class Interpreter(object):
                 
         return result
     #==================================================================#
+    # Comparison operations
     #==================================================================#
     def comparison(self):
         left = self.term()
@@ -259,9 +264,28 @@ class Interpreter(object):
             
         return left
     #==================================================================#
+    # Expression operations 
+    # Parse and evaluate an additive expression (handles PLUS and MINUS).
+    #==================================================================#
+    # Behavior:
+    #    - Primes the lexer on first call by reading the first token.
+    #    - Parses a comparison-level value as the left operand, then
+    #      repeatedly consumes PLUS/MINUS and combines with the next comparison.
+    #    - Prevents mixing boolean comparison results with arithmetic; if a
+    #      comparison produced a boolean sentinel, arithmetic chaining raises
+    #      a parse error.
+
+    # Returns:
+    #    - numeric value (int/float) when arithmetic is performed or
+    #      the raw comparison result when no additive operator follows.
+
+    # Notes:
+    #    - Prefer returning real Python booleans from `comparison()` and
+    #      validate both operands before applying arithmetic to avoid
+    #      surprising behavior.
     #==================================================================#
     def expr(self):
-        # prime the first token on first call
+        # Prime the first token on first call
         if self.current_token is None:
             self.current_token = self.get_next_token()
 
@@ -269,18 +293,24 @@ class Interpreter(object):
 
         # Only allow arithmetic chaining when result is numeric
         while self.current_token.type in (PLUS, MINUS):
-            if isinstance(result, str):
-                # already boolean TRUE/FALSE; disallow further arithmetic
+            # Disallow arithmetic if left is a boolean value
+            if isinstance(result, bool):
                 self.error()
 
-            token = self.current_token
-            if token.type == PLUS:
+            if self.current_token.type == PLUS:
                 self.eat(PLUS)
-                result = result + self.comparison()
-            elif token.type == MINUS:
+                right = self.comparison()
+                if isinstance(right, bool):
+                    self.error()
+                result = result + right
+            elif self.current_token.type == MINUS:
                 self.eat(MINUS)
-                result = result - self.comparison()
-                
+                right = self.comparison()
+                if isinstance(right, bool):
+                    self.error()
+                result = result - right
+
         return result
 #======================================================================================#
+#=================================== End of Program ===================================#
 #======================================================================================#
